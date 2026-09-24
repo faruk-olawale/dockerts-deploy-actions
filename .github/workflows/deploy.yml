@@ -34,17 +34,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-     - name: Resolve image references
-    id: images
-    env:
-      RAW_REPO: ${{ github.repository }}
-      SHA: ${{ github.sha }}
-    run: |
-      # GHCR requires a lowercase path; the owner/repo casing is not guaranteed.
-      repo="\((echo "\)RAW_REPO" | tr '[:upper:]' '[:lower:]')"
-      echo "backend=\({REGISTRY}/\){repo}/backend:\({SHA}" >> "\)GITHUB_OUTPUT"
-      echo "frontend=\({REGISTRY}/\){repo}/frontend:\({SHA}" >> "\)GITHUB_OUTPUT"
-      echo "repo=\({repo}" >> "\)GITHUB_OUTPUT"
+      - name: Resolve image references
+        id: images
+        run: |
+          # GHCR requires a lowercase path; the owner/repo casing is not guaranteed.
+          repo="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "backend=${REGISTRY}/${repo}/backend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "frontend=${REGISTRY}/${repo}/frontend:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+          echo "repo=${repo}" >> "$GITHUB_OUTPUT"
 
       # Buildx is required for the type=gha layer cache used by the build steps.
       - name: Set up Buildx
@@ -67,7 +64,7 @@ jobs:
           # pointer for humans pulling by hand.
           tags: |
             ${{ steps.images.outputs.backend }}
-            \({{ env.REGISTRY }}/\){{ steps.images.outputs.repo }}/backend:latest
+            ${{ env.REGISTRY }}/${{ steps.images.outputs.repo }}/backend:latest
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -79,7 +76,7 @@ jobs:
           push: true
           tags: |
             ${{ steps.images.outputs.frontend }}
-            \({{ env.REGISTRY }}/\){{ steps.images.outputs.repo }}/frontend:latest
+            ${{ env.REGISTRY }}/${{ steps.images.outputs.repo }}/frontend:latest
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
@@ -107,37 +104,14 @@ jobs:
           RAW_USER: ${{ secrets.EC2_USERNAME }}
           RAW_PORT: ${{ secrets.EC2_PORT }}
         run: |
-          clean() { printf '%s' "\(1" \vert{} tr -d '\r\n' \vert{} sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*\)//'; }
-          dir="\((clean "\)RAW_DIR")"
+          clean() { printf '%s' "$1" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'; }
+          dir="$(clean "$RAW_DIR")"
           {
             echo "dir=${dir:-/home/ubuntu/app}"
-            echo "host=\((clean "\)RAW_HOST")"
-            echo "user=\((clean "\)RAW_USER")"
-            echo "port=\((clean "\)RAW_PORT")"
+            echo "host=$(clean "$RAW_HOST")"
+            echo "user=$(clean "$RAW_USER")"
+            echo "port=$(clean "$RAW_PORT")"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Validate SSH configuration
-        env:
-          SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-          SSH_HOST: ${{ steps.cfg.outputs.host }}
-          SSH_USER: ${{ steps.cfg.outputs.user }}
-          SSH_PORT: ${{ steps.cfg.outputs.port }}
-        run: |
-          test -n "$SSH_KEY" || {
-            echo "EC2_SSH_KEY is empty or unavailable to this job" >&2
-            exit 1
-          }
-          case "$SSH_KEY" in
-            *"-----BEGIN "*PRIVATE" KEY-----"*) ;;
-            *)
-              echo "EC2_SSH_KEY does not look like a PEM/OpenSSH private key" >&2
-              exit 1
-              ;;
-          esac
-
-          test -n "$SSH_HOST" || { echo "EC2_HOST is empty" >&2; exit 1; }
-          test -n "$SSH_USER" || { echo "EC2_USERNAME is empty" >&2; exit 1; }
-          test -n "$SSH_PORT" || { echo "EC2_PORT is empty" >&2; exit 1; }
 
       - name: Copy deploy files to EC2
         uses: appleboy/scp-action@v0.1.7
