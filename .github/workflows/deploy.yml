@@ -34,14 +34,17 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve image references
-        id: images
-        run: |
-          # GHCR requires a lowercase path; the owner/repo casing is not guaranteed.
-          repo="\((echo "\){{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
-          echo "backend=\({REGISTRY}/\){repo}/backend:\({{ github.sha }}" >> "\)GITHUB_OUTPUT"
-          echo "frontend=\({REGISTRY}/\){repo}/frontend:\({{ github.sha }}" >> "\)GITHUB_OUTPUT"
-          echo "repo=\({repo}" >> "\)GITHUB_OUTPUT"
+     - name: Resolve image references
+    id: images
+    env:
+      RAW_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+    run: |
+      # GHCR requires a lowercase path; the owner/repo casing is not guaranteed.
+      repo="\((echo "\)RAW_REPO" | tr '[:upper:]' '[:lower:]')"
+      echo "backend=\({REGISTRY}/\){repo}/backend:\({SHA}" >> "\)GITHUB_OUTPUT"
+      echo "frontend=\({REGISTRY}/\){repo}/frontend:\({SHA}" >> "\)GITHUB_OUTPUT"
+      echo "repo=\({repo}" >> "\)GITHUB_OUTPUT"
 
       # Buildx is required for the type=gha layer cache used by the build steps.
       - name: Set up Buildx
